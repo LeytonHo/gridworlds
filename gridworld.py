@@ -1,4 +1,5 @@
 import enum
+from abc import ABC, abstractmethod
 
 
 class Actions(enum.IntEnum):
@@ -7,3 +8,21 @@ class Actions(enum.IntEnum):
     LEFT = 2
     RIGHT = 3
     STAY = 4
+
+
+class Environment(ABC):
+    @abstractmethod
+    def setup(self):
+        pass
+
+    @abstractmethod
+    def reset(self):
+        pass
+
+    @abstractmethod
+    def step(self, action):
+        pass
+
+    @abstractmethod
+    def action_space(self):
+        pass
