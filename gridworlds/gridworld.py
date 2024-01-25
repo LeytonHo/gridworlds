@@ -26,3 +26,7 @@ class Environment(ABC):
     @abstractmethod
     def action_space(self):
         pass
+
+    @abstractmethod
+    def print_environment(self):
+        pass
