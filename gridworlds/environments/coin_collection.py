@@ -1,6 +1,7 @@
 import random
 import itertools
-from gridworlds.gridworld import Environment
+import copy
+from gridworlds.gridworld import Environment, Actions
 
 
 ENV_DIMENSION = 5
@@ -15,11 +16,21 @@ example_environment = [
 
 
 class CoinCollectionEnvironment(Environment):
-    def __init__(self, max_walls=5, min_timesteps=5, max_timesteps=10):
-        self.max_walls = max_walls
-        self.min_timesteps = min_timesteps
-        self.max_timesteps = max_timesteps
-        self.environment, self.agent_coordinates, self.episode_timesteps = self.generate_environment()
+    def __init__(self, max_walls=5, min_timesteps=5, max_timesteps=10, coin_min=1, coin_max=8):
+        self._max_walls = max_walls
+        self._min_timesteps = min_timesteps
+        self._max_timesteps = max_timesteps
+        self._coin_min = coin_min
+        self._coin_max = coin_max
+
+        self._episode_reward = 0
+
+        self._environment, self._agent_coordinates, self._episode_timesteps = self.generate_environment()
+
+        # Save the original configuration since we will mutate the above variables
+        self._base_environment = copy.deepcopy(self._environment)
+        self._base_agent_coordinates = copy.deepcopy(self._agent_coordinates)
+        self._base_episode_timesteps = copy.deepcopy(self._episode_timesteps)
 
     def generate_environment(self):
         '''
@@ -55,7 +66,7 @@ class CoinCollectionEnvironment(Environment):
                 continue
 
             # Place walls randomly, ensuring that there are no surrounding walls around the agent
-            if wall_count < self.max_walls and abs(row - agent_coordinates[0]) + abs(col - agent_coordinates[1]) != 1:
+            if wall_count < self._max_walls and abs(row - agent_coordinates[0]) + abs(col - agent_coordinates[1]) != 1:
                 if random.random() < 0.2:
                     environment[row][col] = '#'
                     wall_count += 1
@@ -63,22 +74,77 @@ class CoinCollectionEnvironment(Environment):
 
             # Place coins randomly
             if random.random() < 0.2:
-                environment[row][col] = random.randint(1, 8)
+                environment[row][col] = random.randint(self._coin_min, self._coin_max)
 
-        episode_timesteps = random.randint(self.min_timesteps, self.max_timesteps)
+        episode_timesteps = random.randint(self._min_timesteps, self._max_timesteps)
         return environment, agent_coordinates, episode_timesteps
 
     def setup(self):
-        pass
+        '''
+        Generates a new environment configuration.
+        '''
+        self._environment, self._agent_coordinates, self._episode_timesteps = self.generate_environment()
 
     def reset(self):
-        self.environment, self.agent_coordinates, self.episode_timesteps = self.generate_environment()
+        '''
+        Resets the environment to its original configuration.
+        '''
+        self._environment = copy.deepcopy(self._base_environment)
+        self._agent_coordinates = copy.deepcopy(self._base_agent_coordinates)
+        self._episode_timesteps = copy.deepcopy(self._base_episode_timesteps)
+        self._episode_reward = 0
+
+    def move(self, delta_x, delta_y):
+        current_row, current_col = self._agent_coordinates
+        new_row, new_col = current_row + delta_x, current_col + delta_y
+
+        if self._environment[new_row][new_col] is not None:
+            self._episode_reward += self._environment[new_row][new_col]
+
+            # Not needed if we don't support STAY
+            self._environment[new_row][new_col] = None
+
+        self._agent_coordinates = new_row, new_col
+        self._environment[current_row][current_col] = None
 
     def step(self, action):
-        pass
+        valid_actions = self.action_space()
+        assert action in valid_actions, "Invalid action - action must be one of {}".format(valid_actions)
+
+        if action == Actions.UP:
+            self.move(-1, 0)
+        elif action == Actions.DOWN:
+            self.move(1, 0)
+        elif action == Actions.LEFT:
+            self.move(0, -1)
+        elif action == Actions.RIGHT:
+            self.move(0, 1)
+
+        self._episode_timesteps -= 1
+
+        # TODO: Other ways to handle this, including end_game instance variable
+        if self._episode_timesteps == 0:
+            return True, self._episode_reward
+        else:
+            return False, self._episode_reward
 
     def action_space(self):
-        pass
+        current_row, current_col = self._agent_coordinates
+        valid_actions = [Actions.STAY]
+
+        if current_row > 0 and self._environment[current_row - 1][current_col] != '#':
+            valid_actions.append(Actions.UP)
+
+        if current_row < ENV_DIMENSION - 1 and self._environment[current_row + 1][current_col] != '#':
+            valid_actions.append(Actions.DOWN)
+
+        if current_col > 0 and self._environment[current_row][current_col - 1] != '#':
+            valid_actions.append(Actions.LEFT)
+
+        if current_col < ENV_DIMENSION - 1 and self._environment[current_row][current_col + 1] != '#':
+            valid_actions.append(Actions.RIGHT)
+
+        return valid_actions
 
     def print_environment(self):
-        print('\n'.join(['\t'.join([str(cell) for cell in row]) for row in self.environment]))
+        print('\n'.join(['\t'.join([str(cell) for cell in row]) for row in self._environment]))
