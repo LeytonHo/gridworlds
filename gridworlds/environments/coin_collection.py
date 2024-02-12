@@ -4,7 +4,6 @@ import copy
 from gridworlds.gridworld import Environment, Actions
 
 
-ENV_DIMENSION = 5
 MAX_INT = 100000
 example_environment = [
     [3, None, None, '#', 1],
@@ -16,12 +15,14 @@ example_environment = [
 
 
 class CoinCollectionEnvironment(Environment):
-    def __init__(self, max_walls=5, min_timesteps=5, max_timesteps=10, coin_min=1, coin_max=8):
+    def __init__(self, max_walls=5, min_timesteps=6, max_timesteps=12, coin_min=1, coin_max=8):
         self._max_walls = max_walls
         self._min_timesteps = min_timesteps
         self._max_timesteps = max_timesteps
         self._coin_min = coin_min
         self._coin_max = coin_max
+        self.ENV_DIMENSION = 5
+        self.game_over = False
 
         self._episode_reward = 0
 
@@ -46,12 +47,12 @@ class CoinCollectionEnvironment(Environment):
             - The starting position of the agent
             - The number of timesteps before the episode terminates
         '''
-        environment = [[None] * ENV_DIMENSION for _ in range(ENV_DIMENSION)]
+        environment = [[None] * self.ENV_DIMENSION for _ in range(self.ENV_DIMENSION)]
         wall_count = 0
         agent_assigned = False
         agent_coordinates = MAX_INT, MAX_INT
 
-        coordinate_pairs = list(itertools.product(range(ENV_DIMENSION), range(ENV_DIMENSION)))
+        coordinate_pairs = list(itertools.product(range(self.ENV_DIMENSION), range(self.ENV_DIMENSION)))
 
         # We want to process each square in the Gridworld sequentially, but without bias
         # This avoid issues like frequently placing the agent in the top left corner, for example
@@ -93,55 +94,59 @@ class CoinCollectionEnvironment(Environment):
         self._agent_coordinates = copy.deepcopy(self._base_agent_coordinates)
         self._episode_timesteps = copy.deepcopy(self._base_episode_timesteps)
         self._episode_reward = 0
+        self.game_over = False
 
     def move(self, delta_x, delta_y):
         current_row, current_col = self._agent_coordinates
         new_row, new_col = current_row + delta_x, current_col + delta_y
+        move_reward = 0
 
         if self._environment[new_row][new_col] is not None:
             self._episode_reward += self._environment[new_row][new_col]
+            move_reward = self._environment[new_row][new_col]
 
-            # Not needed if we don't support STAY
-            self._environment[new_row][new_col] = None
+            # Reward collected, remove the coin
+            self._environment[new_row][new_col] = 'A'
 
         self._agent_coordinates = new_row, new_col
         self._environment[current_row][current_col] = None
+        return move_reward
 
     def step(self, action):
         valid_actions = self.action_space()
         assert action in valid_actions, "Invalid action - action must be one of {}".format(valid_actions)
 
         if action == Actions.UP:
-            self.move(-1, 0)
+            step_reward = self.move(-1, 0)
         elif action == Actions.DOWN:
-            self.move(1, 0)
+            step_reward = self.move(1, 0)
         elif action == Actions.LEFT:
-            self.move(0, -1)
+            step_reward = self.move(0, -1)
         elif action == Actions.RIGHT:
-            self.move(0, 1)
+            step_reward = self.move(0, 1)
 
         self._episode_timesteps -= 1
 
-        # TODO: Other ways to handle this, including end_game instance variable
         if self._episode_timesteps == 0:
-            return True, self._episode_reward
+            self.game_over = True
+            return 0
         else:
-            return False, self._episode_reward
+            return step_reward
 
     def action_space(self):
         current_row, current_col = self._agent_coordinates
-        valid_actions = [Actions.STAY]
+        valid_actions = []
 
         if current_row > 0 and self._environment[current_row - 1][current_col] != '#':
             valid_actions.append(Actions.UP)
 
-        if current_row < ENV_DIMENSION - 1 and self._environment[current_row + 1][current_col] != '#':
+        if current_row < self.ENV_DIMENSION - 1 and self._environment[current_row + 1][current_col] != '#':
             valid_actions.append(Actions.DOWN)
 
         if current_col > 0 and self._environment[current_row][current_col - 1] != '#':
             valid_actions.append(Actions.LEFT)
 
-        if current_col < ENV_DIMENSION - 1 and self._environment[current_row][current_col + 1] != '#':
+        if current_col < self.ENV_DIMENSION - 1 and self._environment[current_row][current_col + 1] != '#':
             valid_actions.append(Actions.RIGHT)
 
         return valid_actions

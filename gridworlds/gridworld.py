@@ -7,7 +7,7 @@ class Actions(enum.IntEnum):
     DOWN = 1
     LEFT = 2
     RIGHT = 3
-    STAY = 4
+    # STAY = 4
 
 
 class Environment(ABC):
